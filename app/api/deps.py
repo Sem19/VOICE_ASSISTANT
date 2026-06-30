@@ -8,6 +8,7 @@ from app.services.stt.base import STTService
 from app.services.stt.faster_whisper import FasterWhisperSTTService
 from app.services.tts.base import TTSService
 from app.services.tts.piper import PiperTTSService
+from app.services.voice.pipeline import VoicePipelineService
 
 
 @lru_cache
@@ -41,3 +42,12 @@ def get_tts_service() -> TTSService:
             output_dir=settings.TTS_OUTPUT_DIR,
         )
     raise ValueError(f"Unsupported TTS provider: {settings.TTS_PROVIDER}")
+
+
+@lru_cache
+def get_voice_pipeline_service() -> VoicePipelineService:
+    return VoicePipelineService(
+        stt=get_stt_service(),
+        chat=get_chat_service(),
+        tts=get_tts_service(),
+    )
