@@ -1,26 +1,27 @@
 services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: voice-assistant-api
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  voice-ai-backend:
+    build: .
+    container_name: voice-ai-backend
+    ports:
+      - "8000:8000"
     env_file:
       - .env
     environment:
-      APP_HOST: 0.0.0.0
-      APP_PORT: 8000
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - .:/app
+    depends_on:
+      - ollama
     restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+
+volumes:
+  ollama_data:

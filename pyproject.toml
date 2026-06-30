@@ -1,19 +1,24 @@
 [project]
-name = "voice-assistant"
+name = "local-voice-ai-assistant"
 version = "0.1.0"
-description = "Local Voice AI Assistant API"
+description = "Local Voice AI Assistant backend foundation"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "pydantic-settings>=2.6.0",
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "python-dotenv",
+    "httpx",
+    "python-multipart",
+    "faster-whisper",
+    "piper-tts",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "httpx>=0.27.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
+    "pytest",
+    "pytest-asyncio",
 ]
 
 [build-system]
@@ -23,13 +28,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
-[dependency-groups]
-dev = [
-    "httpx>=0.27.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
-]
-
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"

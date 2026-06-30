@@ -1,10 +1,6 @@
-.git
-.gitignore
-.venv
-__pycache__
-*.pyc
-.pytest_cache
+.venv/
+__pycache__/
+.pytest_cache/
+.git/
 .env
-.env.local
-tests
-*.md
+*.pyc
