@@ -30,6 +30,7 @@ def get_stt_service() -> STTService:
         model_size=settings.STT_MODEL_SIZE,
         device=settings.STT_DEVICE,
         compute_type=settings.STT_COMPUTE_TYPE,
+        language=settings.STT_LANGUAGE,
     )
 
 

@@ -12,10 +12,12 @@ class FasterWhisperSTTService(STTService):
         model_size: str,
         device: str,
         compute_type: str,
+        language: str = "en",
     ) -> None:
         self._model_size = model_size
         self._device = device
         self._compute_type = compute_type
+        self._language = language.strip() or None
         self._model = None
 
     def _load_model(self):
@@ -40,7 +42,10 @@ class FasterWhisperSTTService(STTService):
 
         try:
             model = self._load_model()
-            segments, info = model.transcribe(file_path)
+            transcribe_kwargs = {}
+            if self._language:
+                transcribe_kwargs["language"] = self._language
+            segments, info = model.transcribe(file_path, **transcribe_kwargs)
             text = " ".join(segment.text.strip() for segment in segments).strip()
         except Exception as exc:
             logger.error("Transcription failed for %s: %s", file_path, exc)

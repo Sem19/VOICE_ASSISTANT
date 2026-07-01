@@ -23,5 +23,22 @@ services:
       - ollama
     restart: unless-stopped
 
+  asterisk:
+    build: ./asterisk
+    container_name: asterisk
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "10000-10100:10000-10100/udp"
+    environment:
+      VOICE_API_URL: http://voice-ai-backend:8000/voice
+      VOICE_SESSION_ID: asterisk-call
+    volumes:
+      - ./asterisk/config:/etc/asterisk:ro
+      - ./asterisk/scripts/send_to_voice_api.py:/usr/local/bin/send_to_voice_api.py:ro
+    depends_on:
+      - voice-ai-backend
+    restart: unless-stopped
+
 volumes:
   ollama_data:

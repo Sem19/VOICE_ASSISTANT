@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     STT_MODEL_SIZE: str = "base"
     STT_DEVICE: str = "cpu"
     STT_COMPUTE_TYPE: str = "int8"
+    STT_LANGUAGE: str = "en"
     TTS_PROVIDER: str = "piper"
     PIPER_MODEL_PATH: str = "models/piper/en_US-lessac-medium.onnx"
     PIPER_CONFIG_PATH: str = "models/piper/en_US-lessac-medium.onnx.json"

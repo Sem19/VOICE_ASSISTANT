@@ -30,5 +30,5 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "asterisk/scripts"]
 asyncio_mode = "auto"

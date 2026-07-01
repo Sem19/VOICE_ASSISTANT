@@ -1,6 +1,6 @@
 # local-voice-ai-assistant
 
-Backend for a local Voice AI Assistant. Phase 1 provides infrastructure. Phase 2 adds LLM chat via Ollama. Phase 3 adds local speech-to-text with faster-whisper. Phase 4 adds local text-to-speech with Piper. Phase 5 connects STT, LLM, and TTS into a single voice pipeline. Telephony integrations are planned for later phases.
+Backend for a local Voice AI Assistant. Phase 1 provides infrastructure. Phase 2 adds LLM chat via Ollama. Phase 3 adds local speech-to-text with faster-whisper. Phase 4 adds local text-to-speech with Piper. Phase 5 connects STT, LLM, and TTS into a single voice pipeline. Phase 6 adds a telephony MVP with Asterisk and Linphone. Streaming and RAG are planned for later phases.
 
 ## Prerequisites
 
@@ -231,9 +231,104 @@ Use [http://localhost:8000/docs](http://localhost:8000/docs) → **POST /voice**
 
 Supported upload formats: **wav**, **mp3**, **m4a**, **flac**. Optional `session_id` keeps conversation history across requests.
 
+## Phase 6 — Telephony MVP with Asterisk + Linphone
+
+This phase connects the existing `/voice` pipeline to a SIP phone call.
+
+This is **not real-time streaming yet**. It is a simple call-record-process-playback MVP:
+
+```
+Linphone caller → Asterisk → POST /voice → spoken WAV playback → caller
+```
+
+It proves that phone audio can enter the local AI backend and return as speech. Streaming and barge-in will come in later phases.
+
+### Start all services
+
+```bash
+docker compose up --build
+```
+
+One-time setup:
+
+```bash
+docker compose exec ollama ollama pull llama3.2
+docker compose exec voice-ai-backend uv run python -m piper.download_voices en_US-lessac-medium --download-dir models/piper
+```
+
+Services:
+
+| Service | Purpose | Ports |
+|---------|---------|-------|
+| `voice-ai-backend` | FastAPI API | 8000 |
+| `ollama` | LLM | 11434 |
+| `asterisk` | SIP telephony | 5060/udp, 10000-10100/udp |
+
+### SIP extensions
+
+| Extension | Username | Password | Role |
+|-----------|----------|----------|------|
+| 1001 | 1001 | 1001pass | AI assistant |
+| 1002 | 1002 | 1002pass | Simple test extension |
+
+Call flow for **1001**:
+
+1. Answer call
+2. Play beep
+3. Record caller speech (up to 15 seconds)
+4. Send recording to `http://voice-ai-backend:8000/voice`
+5. Play AI response WAV
+6. Hang up
+
+### Linphone setup
+
+1. Install [Linphone](https://www.linphone.org/)
+2. Add SIP account (recommended: use **1002** to call the AI on **1001**):
+
+   **Option A — call the AI assistant**
+   - Username: `1002`
+   - Password: `1002pass`
+   - Domain: `127.0.0.1` (same PC as Docker)
+   - Transport: **TCP** on Linphone 6.1 for Windows (UDP is disabled by default in that build)
+   - **Leave Registrar URI empty** — Linphone will register as `1002@127.0.0.1`
+   - Do **not** use `sip:127.0.0.1:5060` in Registrar URI (causes Asterisk 404)
+   - Port: `5060`
+   - Then call: `1001` or `sip:1001@127.0.0.1`
+
+   **Option B — use the AI extension directly**
+   - Username: `1001`
+   - Password: `1001pass`
+   - Same server settings as above
+   - Call: `1001` or `sip:1001@127.0.0.1`
+
+After the beep, speak your question. The call ends after the AI response is played.
+
+Test extension **1002** should play `hello-world` and hang up.
+
+### Troubleshooting
+
+| Problem | Likely cause |
+|---------|----------------|
+| Call fails to connect | Wrong SIP domain/IP, Linphone using UDP on Windows 6.1 (use TCP), or Asterisk not running |
+| Call connects but no audio | RTP ports `10000-10100/udp` blocked or NAT issue |
+| AI step fails | Ollama stopped, Piper model missing, or `/voice` returned an error |
+| Long silence before reply | First request loads STT/LLM/TTS models — normal on cold start |
+
+Check Asterisk logs:
+
+```bash
+docker compose logs -f asterisk
+```
+
+Check backend logs:
+
+```bash
+docker compose logs -f voice-ai-backend
+```
+
 ## Run with Docker Compose
 
-Docker Compose runs **both** the API and **Ollama** — no local Ollama install needed.
+Docker Compose runs the API, Ollama, and Asterisk — no local Ollama install needed.
 
 Ensure `.env` exists (copy from `.env.example`), then:
 
@@ -251,10 +346,12 @@ Then open [http://localhost:8000/docs](http://localhost:8000/docs) and try **POS
 
 Services:
 
-| Service            | URL                                      |
+| Service            | URL / Port                               |
 |--------------------|------------------------------------------|
 | API                | [http://localhost:8000](http://localhost:8000) |
-| Ollama (optional)  | [http://localhost:11434](http://localhost:11434) |
+| Ollama             | [http://localhost:11434](http://localhost:11434) |
+| Asterisk SIP       | `5060/udp`                               |
+| Asterisk RTP       | `10000-10100/udp`                        |
 
 The backend connects to Ollama at `http://ollama:11434` inside the Docker network. Your `.env` `OLLAMA_BASE_URL` is overridden automatically in Compose — you do not need `host.docker.internal`.
 
@@ -310,14 +407,24 @@ local-voice-ai-assistant/
 │   └── test_voice.py
 ├── Dockerfile
 ├── docker-compose.yml
+├── asterisk/
+│   ├── Dockerfile
+│   ├── config/
+│   │   ├── pjsip.conf
+│   │   ├── extensions.conf
+│   │   ├── modules.conf
+│   │   └── rtp.conf
+│   ├── scripts/
+│   │   └── send_to_voice_api.py
+│   └── sounds/
 ├── pyproject.toml
 └── uv.lock
 ```
 
 ## Architecture
 
-The chat API depends on a `ChatService`, which delegates to an `LLMService` interface. The transcribe API depends on an `STTService` interface. The TTS API depends on a `TTSService` interface. The voice API uses `VoicePipelineService` to orchestrate all three without duplicating logic.
+The chat API depends on a `ChatService`, which delegates to an `LLMService` interface. The transcribe API depends on an `STTService` interface. The TTS API depends on a `TTSService` interface. The voice API uses `VoicePipelineService` to orchestrate all three without duplicating logic. Asterisk calls `/voice` through `asterisk/scripts/send_to_voice_api.py`.
 
 ## Next phases
 
-Future work will add telephony (Asterisk/SIP), streaming, and RAG. The full local voice loop is already available through **POST /voice**.
+Future work will add streaming, barge-in, and RAG. The telephony MVP is available by calling SIP extension **1001**.
