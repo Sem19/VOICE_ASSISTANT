@@ -17,6 +17,8 @@ RUN apt-get update \
 
 COPY config/ /etc/asterisk/
 COPY scripts/send_to_voice_api.py /usr/local/bin/send_to_voice_api.py
-RUN chmod +x /usr/local/bin/send_to_voice_api.py
+COPY scripts/voice_turn_agi.py /usr/local/bin/voice_turn_agi.py
+RUN sed -i 's/\r$//' /usr/local/bin/send_to_voice_api.py /usr/local/bin/voice_turn_agi.py \
+    && chmod +x /usr/local/bin/send_to_voice_api.py /usr/local/bin/voice_turn_agi.py
 
 EXPOSE 5060/udp 5060/tcp 10000-10100/udp

@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     PIPER_CONFIG_PATH: str = "models/piper/en_US-lessac-medium.onnx.json"
     TTS_OUTPUT_DIR: str = "storage/tts"
     VOICE_MAX_TURNS: int = 5
+    VOICE_GREETING: str = (
+        "Hello! I'm your voice assistant. "
+        "Ask me a question after the beep, and say goodbye when you're finished."
+    )
+    VOICE_THINKING_PROMPT: str = "One moment please, I'm thinking."
 
 
 settings = Settings()

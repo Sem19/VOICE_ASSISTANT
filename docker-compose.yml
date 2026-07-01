@@ -35,7 +35,9 @@ services:
       VOICE_MAX_TURNS: "5"
     volumes:
       - ./asterisk/config:/etc/asterisk:ro
+      - ./asterisk/sounds:/var/lib/asterisk/sounds/custom:ro
       - ./asterisk/scripts/send_to_voice_api.py:/usr/local/bin/send_to_voice_api.py:ro
+      - ./asterisk/scripts/voice_turn_agi.py:/usr/local/bin/voice_turn_agi.py:ro
     depends_on:
       - voice-ai-backend
     restart: unless-stopped

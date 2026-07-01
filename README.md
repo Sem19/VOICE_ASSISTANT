@@ -252,8 +252,9 @@ docker compose up --build
 One-time setup:
 
 ```bash
-docker compose exec ollama ollama pull llama3.2
+docker compose exec ollama ollama pull llama3.2:1b
 docker compose exec voice-ai-backend uv run python -m piper.download_voices en_US-lessac-medium --download-dir models/piper
+docker compose exec voice-ai-backend uv run python scripts/generate_greeting.py
 ```
 
 Services:
@@ -339,7 +340,7 @@ Linphone caller → Asterisk loop:
 ### Call flow for extension 1001
 
 1. Answer call
-2. Play greeting (`hello-world`)
+2. Play AI greeting (`custom/ai-greeting`)
 3. Loop up to **5 turns** (configurable):
    - Play beep
    - Record caller speech (3–20 seconds)
