@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     PIPER_MODEL_PATH: str = "models/piper/en_US-lessac-medium.onnx"
     PIPER_CONFIG_PATH: str = "models/piper/en_US-lessac-medium.onnx.json"
     TTS_OUTPUT_DIR: str = "storage/tts"
+    VOICE_MAX_TURNS: int = 5
 
 
 settings = Settings()

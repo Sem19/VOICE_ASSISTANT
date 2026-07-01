@@ -11,17 +11,28 @@ from app.schemas.voice import LatencyMetrics, VoiceDebugResponse
 from app.services.llm.base import LLMServiceError
 from app.services.stt.base import STTServiceError
 from app.services.tts.base import TTSServiceError
-from app.services.voice.pipeline import VoicePipelineService
+from app.services.voice.pipeline import VoicePipelineResult, VoicePipelineService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["voice"])
 
 
+def _voice_response_headers(result: VoicePipelineResult) -> dict[str, str]:
+    return {
+        "X-End-Call": "true" if result.end_call else "false",
+        "X-Call-Id": result.call_id or "",
+        "X-Turn-Number": str(result.turn_number or 0),
+        "X-Session-Id": result.session_id or "",
+    }
+
+
 @router.post("/voice", response_model=None)
 async def voice(
     file: UploadFile = File(...),
     session_id: str | None = Form(None),
+    call_id: str | None = Form(None),
+    turn_number: int | None = Form(None),
     return_debug: bool = Form(False),
     pipeline: VoicePipelineService = Depends(get_voice_pipeline_service),
 ) -> FileResponse | VoiceDebugResponse:
@@ -46,13 +57,33 @@ async def voice(
             result = await pipeline.process(
                 file_path=temp_path,
                 session_id=session_id,
+                call_id=call_id,
+                turn_number=turn_number,
                 filename=file.filename,
             )
         except STTServiceError as exc:
+            logger.error(
+                "Voice request failed during STT call_id=%s turn=%s: %s",
+                call_id,
+                turn_number,
+                exc,
+            )
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         except LLMServiceError as exc:
+            logger.error(
+                "Voice request failed during LLM call_id=%s turn=%s: %s",
+                call_id,
+                turn_number,
+                exc.message,
+            )
             raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
         except TTSServiceError as exc:
+            logger.error(
+                "Voice request failed during TTS call_id=%s turn=%s: %s",
+                call_id,
+                turn_number,
+                exc.message,
+            )
             raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
         if return_debug:
@@ -66,12 +97,17 @@ async def voice(
                     tts_ms=result.latency.tts_ms,
                     total_ms=result.latency.total_ms,
                 ),
+                end_call=result.end_call,
+                call_id=result.call_id,
+                turn_number=result.turn_number,
+                session_id=result.session_id,
             )
 
         return FileResponse(
             path=result.audio_path,
             media_type="audio/wav",
             filename=result.audio_path.name,
+            headers=_voice_response_headers(result),
         )
     finally:
         if temp_path is not None:

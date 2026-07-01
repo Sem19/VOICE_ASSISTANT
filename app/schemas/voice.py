@@ -13,3 +13,7 @@ class VoiceDebugResponse(BaseModel):
     llm_response: str
     audio_file_path: str
     latency: LatencyMetrics
+    end_call: bool = False
+    call_id: str | None = None
+    turn_number: int | None = None
+    session_id: str | None = None

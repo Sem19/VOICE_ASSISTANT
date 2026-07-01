@@ -1,6 +1,6 @@
 # local-voice-ai-assistant
 
-Backend for a local Voice AI Assistant. Phase 1 provides infrastructure. Phase 2 adds LLM chat via Ollama. Phase 3 adds local speech-to-text with faster-whisper. Phase 4 adds local text-to-speech with Piper. Phase 5 connects STT, LLM, and TTS into a single voice pipeline. Phase 6 adds a telephony MVP with Asterisk and Linphone. Streaming and RAG are planned for later phases.
+Backend for a local Voice AI Assistant. Phase 1 provides infrastructure. Phase 2 adds LLM chat via Ollama. Phase 3 adds local speech-to-text with faster-whisper. Phase 4 adds local text-to-speech with Piper. Phase 5 connects STT, LLM, and TTS into a single voice pipeline. Phase 6 adds a single-turn telephony MVP with Asterisk and Linphone. Phase 7 adds multi-turn phone conversations on extension 1001. Streaming and RAG are planned for later phases.
 
 ## Prerequisites
 
@@ -235,7 +235,7 @@ Supported upload formats: **wav**, **mp3**, **m4a**, **flac**. Optional `session
 
 This phase connects the existing `/voice` pipeline to a SIP phone call.
 
-This is **not real-time streaming yet**. It is a simple call-record-process-playback MVP:
+This is **not real-time streaming yet**. It is a simple single-turn call-record-process-playback MVP:
 
 ```
 Linphone caller → Asterisk → POST /voice → spoken WAV playback → caller
@@ -271,14 +271,12 @@ Services:
 | 1001 | 1001 | 1001pass | AI assistant |
 | 1002 | 1002 | 1002pass | Simple test extension |
 
-Call flow for **1001**:
+Call flow for **1001** (see Phase 7 for the full multi-turn loop):
 
 1. Answer call
-2. Play beep
-3. Record caller speech (up to 15 seconds)
-4. Send recording to `http://voice-ai-backend:8000/voice`
-5. Play AI response WAV
-6. Hang up
+2. Play greeting
+3. For each turn: beep → record → send to `/voice` → play reply
+4. Repeat until goodbye, max turns, or error
 
 ### Linphone setup
 
@@ -303,6 +301,8 @@ Call flow for **1001**:
 
 After the beep, speak your question. The call ends after the AI response is played.
 
+> **Note:** Extension **1001** now runs the Phase 7 multi-turn loop described below. Phase 6 behavior is preserved as a single exchange inside each turn.
+
 Test extension **1002** should play `hello-world` and hang up.
 
 ### Troubleshooting
@@ -325,6 +325,124 @@ Check backend logs:
 ```bash
 docker compose logs -f voice-ai-backend
 ```
+
+## Phase 7 — Multi-turn voice conversation over Asterisk
+
+Phase 7 keeps the SIP call open so you can ask multiple questions in one conversation. It still uses the same record → `/voice` → playback loop from Phase 6. There is **no streaming** and **no barge-in** yet.
+
+```
+Linphone caller → Asterisk loop:
+  greeting → beep → record → POST /voice → play reply → repeat
+  until goodbye, max turns, or error
+```
+
+### Call flow for extension 1001
+
+1. Answer call
+2. Play greeting (`hello-world`)
+3. Loop up to **5 turns** (configurable):
+   - Play beep
+   - Record caller speech (3–20 seconds)
+   - Send audio to `POST /voice` with the same `session_id` for the whole call
+   - Play AI response
+   - Continue unless goodbye is detected or max turns is reached
+4. Hang up
+
+Each call gets a unique `session_id` (Asterisk `UNIQUEID`). The backend keeps LLM conversation history for that session across turns.
+
+### Goodbye phrases
+
+Say any of these to end the call after the AI reply:
+
+- `bye`
+- `goodbye`
+- `stop`
+- `end call`
+- `thank you goodbye`
+
+### Silence / timeout
+
+If the assistant hears nothing, it plays:
+
+> "I didn't hear anything. Please try again after the beep."
+
+Then the call stays open for another turn.
+
+### Configuration
+
+| Setting | Default | Where |
+|---------|---------|-------|
+| `VOICE_MAX_TURNS` | `5` | `.env` / backend |
+| `MAX_TURNS` in dialplan | `5` | `asterisk/config/extensions.conf` |
+
+Keep both values in sync if you change the turn limit.
+
+### How to test Phase 7
+
+1. Start the stack:
+
+```bash
+docker compose up --build
+```
+
+2. Register Linphone as extension **1002** (TCP, domain `127.0.0.1`) and call **1001**.
+3. After the greeting and beep, ask a first question, for example: **What is two plus two?**
+4. Wait for the reply, then ask a follow-up on the same call: **What about three plus three?**
+5. The assistant should remember the earlier context within the same call.
+6. End the call by saying **goodbye**.
+
+### Logs to inspect
+
+Backend turn logs include `call_id`, `turn`, `session_id`, transcription, latency, and `end_call`:
+
+```bash
+docker compose logs -f voice-ai-backend
+```
+
+Asterisk bridge logs include the same identifiers:
+
+```bash
+docker compose logs -f asterisk
+```
+
+Example backend log line:
+
+```text
+Voice pipeline completed call_id=... turn=2 session_id=... transcription='...' ... end_call=False
+```
+
+### Response headers
+
+`/voice` adds control headers for the Asterisk bridge:
+
+| Header | Meaning |
+|--------|---------|
+| `X-End-Call` | `true` when goodbye or max turns reached |
+| `X-Call-Id` | Asterisk call id |
+| `X-Turn-Number` | Current turn number |
+| `X-Session-Id` | Conversation session id |
+
+### Call ends after one answer
+
+Asterisk keeps the dialplan in memory. If you changed `extensions.conf` while the container was already running, reload it:
+
+```bash
+docker compose exec asterisk asterisk -rx "dialplan reload"
+```
+
+Or restart Asterisk:
+
+```bash
+docker compose restart asterisk voice-ai-backend
+```
+
+Verify the multi-turn dialplan is active:
+
+```bash
+docker compose exec asterisk asterisk -rx "dialplan show from-internal"
+```
+
+You should see `AI Voice Assistant - Multi-turn` and a `[loop]` label on extension **1001**. If you still see a single `Hangup()` right after playback, the old dialplan is still loaded.
 
 ## Run with Docker Compose
 
